@@ -9,7 +9,7 @@ def predict_balance(payload: dict[str, Any]) -> dict[str, Any]:
     current_balance = float(payload.get("current_balance", 0))
     target_date_raw = payload.get("target_date")
     target_date = datetime.fromisoformat(target_date_raw) if target_date_raw else datetime.utcnow()
-    today = datetime.utcnow()
+    today = datetime.now(target_date.tzinfo) if target_date.tzinfo else datetime.utcnow()
 
     if not transactions:
         return {
