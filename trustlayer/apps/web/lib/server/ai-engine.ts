@@ -81,7 +81,7 @@ async function post<T>(path: string, payload: unknown, options?: { timeoutMs?: n
 
 export const aiEngineService = {
   analyzeRisk: <T>(payload: unknown, requestId?: string) => post<T>("/analyze-risk", payload, { timeoutMs: 8000, retryOnce: true, requestId }),
-  scoreCredit: <T>(payload: unknown, requestId?: string) => post<T>("/score-credit", payload, { timeoutMs: 8000, retryOnce: true, requestId }),
+  scoreCredit: <T>(payload: unknown, requestId?: string) => post<T>("/score-credit", payload, { timeoutMs: 15000, retryOnce: false, requestId }),
   parseStatement: <T>(payload: unknown, requestId?: string) => post<T>("/parse-statement", payload, { timeoutMs: 30000, retryOnce: true, requestId }),
   explain: <T>(payload: unknown, requestId?: string) => post<T>("/explain", payload, { timeoutMs: 10000, retryOnce: false, requestId }),
   predictBalance: <T>(payload: unknown, requestId?: string) => post<T>("/predict-balance", payload, { timeoutMs: 8000, retryOnce: true, requestId }),

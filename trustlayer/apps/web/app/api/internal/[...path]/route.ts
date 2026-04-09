@@ -498,3 +498,4 @@ export async function DELETE(request: NextRequest, { params }: { params: { path?
 
   return jsonError("not found", requestId, 404);
 }
+  export const maxDuration = 30; // seconds
