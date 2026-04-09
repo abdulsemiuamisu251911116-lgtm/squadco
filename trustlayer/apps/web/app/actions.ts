@@ -226,6 +226,7 @@ export async function updateBillingSettingsAction(formData: FormData) {
     revalidatePath("/dashboard/billing");
     redirect("/dashboard/billing?success=Billing%20and%20runtime%20settings%20updated");
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/dashboard/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to update settings")}`);
   }
 }
@@ -248,6 +249,7 @@ export async function requestGoLiveAction(formData: FormData) {
     revalidatePath("/dashboard/billing");
     redirect("/dashboard/billing?success=Go-live%20request%20submitted");
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/dashboard/billing?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to submit go-live request")}`);
   }
 }
@@ -265,6 +267,7 @@ export async function reviewGoLiveAction(formData: FormData) {
     revalidatePath("/admin");
     redirect("/admin?success=Go-live%20request%20reviewed");
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/admin?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to review request")}`);
   }
 }
@@ -278,6 +281,7 @@ export async function runMonthlyResetAction() {
     revalidatePath("/dashboard/billing");
     redirect("/admin?success=Monthly%20usage%20reset%20completed");
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/admin?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to run monthly reset")}`);
   }
 }
@@ -291,6 +295,7 @@ export async function retryFailedJobAction(formData: FormData) {
     revalidatePath("/admin/ops");
     redirect("/admin/ops?success=Failed%20job%20requeued");
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/admin/ops?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to retry job")}`);
   }
 }
@@ -311,6 +316,7 @@ export async function createOrganizationAction(formData: FormData) {
     revalidatePath("/admin/organizations");
     redirect("/admin/organizations?success=Organization%20created");
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/admin/organizations/new?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to create organization")}`);
   }
 }
@@ -329,6 +335,7 @@ export async function inviteTeamMemberAction(formData: FormData) {
     revalidatePath("/dashboard/team");
     redirect("/dashboard/team?success=Invite%20sent");
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/dashboard/team?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to send invite")}`);
   }
 }
@@ -347,6 +354,7 @@ export async function createApiKeyAction(formData: FormData) {
     revalidatePath("/dashboard/api-keys");
     redirect(`/dashboard/api-keys?success=${encodeURIComponent(`Key created: ${response.key}`)}`);
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/dashboard/api-keys?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to create API key")}`);
   }
 }
@@ -361,6 +369,7 @@ export async function revokeApiKeyAction(formData: FormData) {
     revalidatePath("/dashboard/api-keys");
     redirect("/dashboard/api-keys?success=API%20key%20revoked");
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/dashboard/api-keys?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to revoke API key")}`);
   }
 }
@@ -383,6 +392,7 @@ export async function createWebhookAction(formData: FormData) {
     revalidatePath("/dashboard/settings");
     redirect("/dashboard/settings?success=Webhook%20saved");
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/dashboard/settings?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to save webhook")}`);
   }
 }
@@ -416,6 +426,7 @@ export async function acceptInviteAction(formData: FormData) {
 
     redirect("/login?error=Invite%20accepted.%20Sign%20in%20with%20your%20new%20password.");
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/invite/${encodeURIComponent(token)}?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to accept invite")}`);
   }
 }
@@ -444,6 +455,7 @@ export async function uploadStatementAction(formData: FormData) {
     revalidatePath("/dashboard/customers");
     redirect(`/dashboard/customers/${customerId}?success=${encodeURIComponent("Statement uploaded and credit score updated")}`);
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/dashboard/customers/${customerId}?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to upload statement")}`);
   }
 }
@@ -458,6 +470,7 @@ export async function testWebhookAction(formData: FormData) {
     revalidatePath("/dashboard/settings");
     redirect("/dashboard/settings?success=Webhook%20test%20sent");
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     redirect(`/dashboard/settings?error=${encodeURIComponent(error instanceof Error ? error.message : "Failed to test webhook")}`);
   }
 }
