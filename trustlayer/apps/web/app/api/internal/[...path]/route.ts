@@ -42,6 +42,80 @@ export async function GET(request: NextRequest, { params }: { params: { path?: s
     return jsonOk(await prisma.apiKey.findMany({ where: { orgId: auth.org_id }, orderBy: { createdAt: "desc" } }), requestId);
   }
 
+  if (key === "org/stats") {
+    if (!auth.org_id) return jsonError("missing org", requestId, 400);
+    const [customers, transactionsToday, flagged, trustAgg] = await Promise.all([
+      prisma.bankCustomer.count({ where: { orgId: auth.org_id } }),
+      prisma.transaction.count({ where: { orgId: auth.org_id, createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } } }),
+      prisma.transaction.count({ where: { orgId: auth.org_id, decision: { in: ["verify", "block"] } } }),
+      prisma.bankCustomer.aggregate({ where: { orgId: auth.org_id }, _avg: { trustScore: true } })
+    ]);
+    return jsonOk({
+      total_customers: customers,
+      transactions_today: transactionsToday,
+      flagged_count: flagged,
+      avg_trust_score: Math.round(trustAgg._avg.trustScore || 0)
+    }, requestId);
+  }
+
+  if (key === "transactions") {
+    if (!auth.org_id) return jsonError("missing org", requestId, 400);
+    const limit = Number(request.nextUrl.searchParams.get("limit") || 20);
+    return jsonOk(await prisma.transaction.findMany({
+      where: { orgId: auth.org_id },
+      orderBy: { createdAt: "desc" },
+      take: limit
+    }), requestId);
+  }
+
+  if (params.path?.[0] === "transactions" && params.path?.[1]) {
+    const transactionId = String(params.path[1]);
+    const transaction = await prisma.transaction.findUnique({ where: { id: transactionId } });
+    if (!transaction) return jsonError("transaction not found", requestId, 404);
+    if (auth.role !== "super_admin" && transaction.orgId !== auth.org_id) return jsonError("forbidden", requestId, 403);
+    const [customer, recentTransactions] = await Promise.all([
+      prisma.bankCustomer.findUnique({ where: { id: transaction.customerId } }),
+      prisma.transaction.findMany({
+        where: { customerId: transaction.customerId },
+        orderBy: { createdAt: "desc" },
+        take: 10
+      })
+    ]);
+    return jsonOk({ ...transaction, customer, recentTransactions }, requestId);
+  }
+
+  if (key === "customers") {
+    if (!auth.org_id) return jsonError("missing org", requestId, 400);
+    const limit = Number(request.nextUrl.searchParams.get("limit") || 20);
+    return jsonOk(await prisma.bankCustomer.findMany({
+      where: { orgId: auth.org_id },
+      orderBy: { createdAt: "desc" },
+      take: limit
+    }), requestId);
+  }
+
+  if (params.path?.[0] === "customers" && params.path?.[1]) {
+    const customerId = String(params.path[1]);
+    const customer = await prisma.bankCustomer.findUnique({ where: { id: customerId } });
+    if (!customer) return jsonError("customer not found", requestId, 404);
+    if (auth.role !== "super_admin" && customer.orgId !== auth.org_id) return jsonError("forbidden", requestId, 403);
+    const [trustHistory, transactions, creditInputs] = await Promise.all([
+      prisma.trustScoreHistory.findMany({ where: { customerId }, orderBy: { createdAt: "desc" }, take: 20 }),
+      prisma.transaction.findMany({ where: { customerId }, orderBy: { createdAt: "desc" }, take: 20 }),
+      prisma.creditInput.findMany({ where: { customerId }, orderBy: { createdAt: "desc" }, take: 20 })
+    ]);
+    const sources = Object.fromEntries(creditInputs.map((item) => [item.inputType, item.data]));
+    const creditSummary = Object.keys(sources).length
+      ? await aiEngineService.scoreCredit<{ credit_score: number; rating: string; breakdown: Record<string, number>; loan_eligibility: string }>({ sources }, requestId)
+      : null;
+    return jsonOk({ ...customer, trustHistory, transactions, creditInputs, creditSummary }, requestId);
+  }
+
+  if (key === "audit-logs") {
+    if (!auth.org_id) return jsonError("missing org", requestId, 400);
+    return jsonOk(await prisma.auditLog.findMany({ where: { orgId: auth.org_id }, orderBy: { createdAt: "desc" }, take: 50 }), requestId);
+  }
+
   if (key === "billing") {
     if (!auth.org_id) return jsonError("missing org", requestId, 400);
     const [org, events, settings, goLiveRequests] = await Promise.all([
@@ -71,6 +145,32 @@ export async function GET(request: NextRequest, { params }: { params: { path?: s
   if (key === "admin/go-live-requests") {
     if (!hasRole(auth.role, ["super_admin"])) return jsonError("forbidden", requestId, 403);
     return jsonOk(await prisma.goLiveRequest.findMany({ orderBy: { createdAt: "desc" }, take: 50 }), requestId);
+  }
+
+  if (key === "admin/orgs") {
+    if (!hasRole(auth.role, ["super_admin"])) return jsonError("forbidden", requestId, 403);
+    return jsonOk(await prisma.organization.findMany({ orderBy: { createdAt: "desc" } }), requestId);
+  }
+
+  if (key === "admin/metrics") {
+    if (!hasRole(auth.role, ["super_admin"])) return jsonError("forbidden", requestId, 403);
+    const [orgs, apiCalls, flagged, scores, failedJobs, queuedJobs] = await Promise.all([
+      prisma.organization.count(),
+      prisma.organization.aggregate({ _sum: { apiCallCount: true } }),
+      prisma.transaction.count({ where: { decision: { in: ["verify", "block"] } } }),
+      prisma.bankCustomer.aggregate({ _avg: { trustScore: true, creditScore: true } }),
+      prisma.failedJob.count(),
+      prisma.backgroundJob.count({ where: { status: "queued" } })
+    ]);
+    return jsonOk({
+      total_orgs: orgs,
+      total_api_calls: apiCalls._sum.apiCallCount || 0,
+      flagged_transactions: flagged,
+      avg_trust_score: Math.round(scores._avg.trustScore || 0),
+      avg_credit_score: Math.round(scores._avg.creditScore || 0),
+      failed_jobs: failedJobs,
+      queued_jobs: queuedJobs
+    }, requestId);
   }
 
   if (key === "admin/failed-jobs") {
@@ -151,6 +251,42 @@ export async function POST(request: NextRequest, { params }: { params: { path?: 
       inviteToken: invite.token
     });
     return jsonOk({ invite_id: invite.id, email_sent: mailResult.sent }, requestId, 201);
+  }
+
+  if (key === "admin/orgs") {
+    if (!hasRole(auth.role, ["super_admin"])) return jsonError("forbidden", requestId, 403);
+    const parsed = z.object({
+      name: z.string(),
+      slug: z.string(),
+      plan: z.enum(["starter", "growth", "enterprise"]).default("starter"),
+      admin_email: z.string().email()
+    }).safeParse(body);
+    if (!parsed.success) return jsonError("invalid request", requestId, 400);
+
+    const org = await prisma.organization.create({
+      data: {
+        name: parsed.data.name,
+        slug: parsed.data.slug,
+        plan: parsed.data.plan
+      }
+    });
+    const invite = await prisma.invitation.create({
+      data: {
+        orgId: org.id,
+        email: parsed.data.admin_email,
+        role: "bank_admin",
+        token: crypto.randomUUID()
+      }
+    });
+    const sender = auth.sub ? await prisma.user.findUnique({ where: { id: auth.sub } }) : null;
+    const mailResult = await sendInviteEmail({
+      to: invite.email,
+      invitedByName: sender?.fullName || sender?.email || null,
+      organizationName: org.name,
+      role: "bank_admin",
+      inviteToken: invite.token
+    });
+    return jsonOk({ ...org, invite, email_sent: mailResult.sent }, requestId, 201);
   }
 
   if (key === "billing/go-live-request") {
@@ -329,6 +465,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { path?:
       }
     });
     return jsonOk(settings, requestId);
+  }
+
+  if (params.path?.[0] === "admin" && params.path?.[1] === "orgs" && params.path?.[2]) {
+    if (!hasRole(auth.role, ["super_admin"])) return jsonError("forbidden", requestId, 403);
+    const parsed = z.object({
+      plan: z.enum(["starter", "growth", "enterprise"]).optional(),
+      status: z.enum(["active", "suspended"]).optional()
+    }).safeParse(body);
+    if (!parsed.success) return jsonError("invalid request", requestId, 400);
+    const updated = await prisma.organization.update({
+      where: { id: String(params.path[2]) },
+      data: parsed.data
+    });
+    return jsonOk(updated, requestId);
   }
 
   return jsonError("not found", requestId, 404);

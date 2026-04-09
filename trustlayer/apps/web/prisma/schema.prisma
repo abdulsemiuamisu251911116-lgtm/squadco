@@ -1,0 +1,330 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["public", "auth"]
+}
+
+model AuthUser {
+  id String @id @db.Uuid
+
+  publicUser User?
+
+  @@map("users")
+  @@schema("auth")
+}
+
+model Organization {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  slug         String   @unique
+  plan         String   @default("starter")
+  status       String   @default("active")
+  apiCallCount Int      @default(0) @map("api_call_count")
+  monthlyLimit Int      @default(10000) @map("monthly_limit")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  users          User[]
+  apiKeys        ApiKey[]
+  bankCustomers  BankCustomer[]
+  transactions   Transaction[]
+  creditInputs   CreditInput[]
+  trustHistory   TrustScoreHistory[]
+  auditLogs      AuditLog[]
+  webhooks       Webhook[]
+  invitations    Invitation[]
+  orgSetting     OrgSetting?
+  billingEvents  BillingEvent[]
+  backgroundJobs BackgroundJob[]
+  failedJobs     FailedJob[]
+  goLiveRequests GoLiveRequest[]
+
+  @@map("organizations")
+  @@schema("public")
+}
+
+model User {
+  id        String   @id @db.Uuid
+  orgId     String?  @map("org_id") @db.Uuid
+  role      String
+  fullName  String?  @map("full_name")
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  authUser                AuthUser        @relation(fields: [id], references: [id])
+  organization            Organization?   @relation(fields: [orgId], references: [id])
+  apiKeys                 ApiKey[]
+  auditLogs               AuditLog[]
+  invitations             Invitation[]
+  userSecurity            UserSecurity?
+  submittedGoLiveRequests GoLiveRequest[] @relation("SubmittedBy")
+  reviewedGoLiveRequests  GoLiveRequest[] @relation("ReviewedBy")
+
+  @@map("users")
+  @@schema("public")
+}
+
+model ApiKey {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId       String    @map("org_id") @db.Uuid
+  createdBy   String?   @map("created_by") @db.Uuid
+  name        String
+  keyHash     String    @unique @map("key_hash")
+  keyPrefix   String    @map("key_prefix")
+  environment String    @default("sandbox")
+  isActive    Boolean   @default(true) @map("is_active")
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  creator      User?        @relation(fields: [createdBy], references: [id])
+
+  @@map("api_keys")
+  @@schema("public")
+}
+
+model BankCustomer {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId               String    @map("org_id") @db.Uuid
+  externalId          String    @map("external_id")
+  bvnHash             String?   @map("bvn_hash")
+  phoneHash           String?   @map("phone_hash")
+  trustScore          Int       @default(500) @map("trust_score")
+  creditScore         Int       @default(0) @map("credit_score")
+  riskTier            String    @default("unverified") @map("risk_tier")
+  totalTransactions   Int       @default(0) @map("total_transactions")
+  flaggedTransactions Int       @default(0) @map("flagged_transactions")
+  lastActivityAt      DateTime? @map("last_activity_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization   Organization        @relation(fields: [orgId], references: [id])
+  transactions   Transaction[]
+  creditInputs   CreditInput[]
+  trustHistory   TrustScoreHistory[]
+  backgroundJobs BackgroundJob[]
+
+  @@unique([orgId, externalId])
+  @@map("bank_customers")
+  @@schema("public")
+}
+
+model Transaction {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
+  customerId    String   @map("customer_id") @db.Uuid
+  externalTxId  String?  @map("external_tx_id")
+  amount        Decimal
+  currency      String   @default("NGN")
+  merchant      String?
+  location      String?
+  deviceId      String?  @map("device_id")
+  ipAddress     String?  @map("ip_address")
+  channel       String?
+  riskScore     Int?     @map("risk_score")
+  riskFactors   Json     @default("[]") @map("risk_factors")
+  decision      String?
+  aiExplanation String?  @map("ai_explanation")
+  status        String   @default("pending")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  customer     BankCustomer @relation(fields: [customerId], references: [id])
+
+  @@map("transactions")
+  @@schema("public")
+}
+
+model CreditInput {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  orgId      String   @map("org_id") @db.Uuid
+  inputType  String   @map("input_type")
+  data       Json     @default("{}")
+  processed  Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  customer     BankCustomer @relation(fields: [customerId], references: [id])
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@map("credit_inputs")
+  @@schema("public")
+}
+
+model TrustScoreHistory {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId   String   @map("customer_id") @db.Uuid
+  orgId        String   @map("org_id") @db.Uuid
+  changeAmount Int      @map("change_amount")
+  oldScore     Int      @map("old_score")
+  newScore     Int      @map("new_score")
+  reason       String
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  customer     BankCustomer @relation(fields: [customerId], references: [id])
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@map("trust_score_history")
+  @@schema("public")
+}
+
+model AuditLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId     String?  @map("org_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  action    String
+  resource  String?
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization? @relation(fields: [orgId], references: [id])
+  user         User?         @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+  @@schema("public")
+}
+
+model Webhook {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  url       String
+  events    String[]
+  secret    String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@map("webhooks")
+  @@schema("public")
+}
+
+model Invitation {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId      String?   @map("org_id") @db.Uuid
+  email      String
+  role       String
+  invitedBy  String?   @map("invited_by") @db.Uuid
+  token      String    @unique
+  acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization? @relation(fields: [orgId], references: [id])
+  inviter      User?         @relation(fields: [invitedBy], references: [id])
+
+  @@map("invitations")
+  @@schema("public")
+}
+
+model OrgSetting {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId                  String   @unique @map("org_id") @db.Uuid
+  sandboxMode            Boolean  @default(true) @map("sandbox_mode")
+  liveEnabled            Boolean  @default(false) @map("live_enabled")
+  failOpenMode           String   @default("verify") @map("fail_open_mode")
+  preferredAssistantName String?  @map("preferred_assistant_name")
+  preferredGreeting      String?  @map("preferred_greeting")
+  squadEnabled           Boolean  @default(false) @map("squad_enabled")
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@map("org_settings")
+  @@schema("public")
+}
+
+model BillingEvent {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId      String   @map("org_id") @db.Uuid
+  eventType  String   @map("event_type")
+  amountKobo BigInt   @default(0) @map("amount_kobo")
+  status     String   @default("pending")
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  @@map("billing_events")
+  @@schema("public")
+}
+
+model BackgroundJob {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId      String?  @map("org_id") @db.Uuid
+  customerId String?  @map("customer_id") @db.Uuid
+  jobType    String   @map("job_type")
+  priority   String   @default("normal")
+  status     String   @default("queued")
+  payload    Json     @default("{}")
+  result     Json     @default("{}")
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization? @relation(fields: [orgId], references: [id])
+  customer     BankCustomer? @relation(fields: [customerId], references: [id])
+  failedJobs   FailedJob[]
+
+  @@map("background_jobs")
+  @@schema("public")
+}
+
+model FailedJob {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  backgroundJobId String?   @map("background_job_id") @db.Uuid
+  orgId           String?   @map("org_id") @db.Uuid
+  jobType         String    @map("job_type")
+  payload         Json      @default("{}")
+  errorMessage    String    @map("error_message")
+  retryCount      Int       @default(0) @map("retry_count")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastRetriedAt   DateTime? @map("last_retried_at") @db.Timestamptz(6)
+
+  backgroundJob BackgroundJob? @relation(fields: [backgroundJobId], references: [id])
+  organization  Organization? @relation(fields: [orgId], references: [id])
+
+  @@map("failed_jobs")
+  @@schema("public")
+}
+
+model UserSecurity {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @unique @map("user_id") @db.Uuid
+  totpEnabled   Boolean  @default(false) @map("totp_enabled")
+  totpSecret    String?  @map("totp_secret")
+  recoveryCodes Json     @default("[]") @map("recovery_codes")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("user_security")
+  @@schema("public")
+}
+
+model GoLiveRequest {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId              String    @map("org_id") @db.Uuid
+  submittedBy        String?   @map("submitted_by") @db.Uuid
+  companyName        String    @map("company_name")
+  rcNumber           String?   @map("rc_number")
+  businessDetails    Json      @default("{}") @map("business_details")
+  useCaseDescription String?   @map("use_case_description")
+  status             String    @default("pending")
+  reviewNotes        String?   @map("review_notes")
+  reviewedBy         String?   @map("reviewed_by") @db.Uuid
+  reviewedAt         DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  submitter    User?        @relation("SubmittedBy", fields: [submittedBy], references: [id])
+  reviewer     User?        @relation("ReviewedBy", fields: [reviewedBy], references: [id])
+
+  @@map("go_live_requests")
+  @@schema("public")
+}
