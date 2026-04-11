@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { NextRequest } from "next/server";
 
-import { prisma } from "./prisma";
+import { prisma, withPrismaReconnectRetry } from "./prisma";
 import { supabaseAdmin } from "./supabase-admin";
 import { incrementWindow } from "./upstash";
 import { captureMessage } from "./monitoring";
@@ -81,26 +81,34 @@ export async function getApiKeyAuth(request: NextRequest): Promise<{ auth: ApiKe
   const rawKey = request.headers.get("x-trustlayer-key");
   if (!rawKey) return { auth: null, reason: "missing" };
 
-  const candidates = await prisma.apiKey.findMany({
-    where: {
-      isActive: true,
-      keyPrefix: { startsWith: rawKey.slice(0, 12) }
-    }
-  });
+  const candidates = await withPrismaReconnectRetry(() =>
+    prisma.apiKey.findMany({
+      where: {
+        isActive: true,
+        keyPrefix: { startsWith: rawKey.slice(0, 12) }
+      }
+    })
+  );
 
   for (const candidate of candidates) {
     if (!(await bcrypt.compare(rawKey, candidate.keyHash))) continue;
     if (!(await withinKeyLimit(candidate.id))) return { auth: null, reason: "rate_limit" };
 
-    const org = await prisma.organization.findUnique({ where: { id: candidate.orgId } });
+    const org = await withPrismaReconnectRetry(() =>
+      prisma.organization.findUnique({ where: { id: candidate.orgId } })
+    );
     if (!org) return { auth: null, reason: "invalid" };
     if (candidate.environment === "production" && org.apiCallCount >= org.monthlyLimit) {
       return { auth: null, reason: "monthly_limit", limit: org.monthlyLimit, used: org.apiCallCount };
     }
     if (!(await withinOrgLimit(candidate.orgId))) return { auth: null, reason: "org_limit" };
 
-    await prisma.apiKey.update({ where: { id: candidate.id }, data: { lastUsedAt: new Date() } });
-    await prisma.organization.update({ where: { id: candidate.orgId }, data: { apiCallCount: { increment: 1 } } });
+    await withPrismaReconnectRetry(() =>
+      prisma.apiKey.update({ where: { id: candidate.id }, data: { lastUsedAt: new Date() } })
+    );
+    await withPrismaReconnectRetry(() =>
+      prisma.organization.update({ where: { id: candidate.orgId }, data: { apiCallCount: { increment: 1 } } })
+    );
 
     return {
       auth: {

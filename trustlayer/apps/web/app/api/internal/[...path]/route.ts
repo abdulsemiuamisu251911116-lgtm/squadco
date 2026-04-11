@@ -400,7 +400,7 @@ export async function POST(request: NextRequest, { params }: { params: { path?: 
           orgId: requestRecord.orgId,
           eventType: parsed.data.action === "approved" ? "go_live_approved" : "go_live_rejected",
           amountKobo: BigInt(0),
-          status: parsed.data.action,
+          status: parsed.data.action === "approved" ? "paid" : "failed",
           metadata: { go_live_request_id: requestRecord.id, review_notes: parsed.data.review_notes || null } as Prisma.InputJsonValue
         }
       })

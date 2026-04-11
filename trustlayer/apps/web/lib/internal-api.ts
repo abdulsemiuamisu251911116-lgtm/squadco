@@ -1,6 +1,17 @@
+import { headers } from "next/headers";
 import { createClient } from "./supabase/server";
 
-function getApiUrl() {
+async function getApiUrl() {
+  const requestHeaders = headers();
+  const forwardedHost = requestHeaders.get("x-forwarded-host");
+  const host = forwardedHost || requestHeaders.get("host");
+  const forwardedProto = requestHeaders.get("x-forwarded-proto");
+
+  if (host) {
+    const protocol = forwardedProto || (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+    return `${protocol}://${host}`;
+  }
+
   const raw = process.env.NEXT_PUBLIC_API_URL || process.env.APP_BASE_URL || "http://localhost:3000";
   return raw.endsWith("/api") ? raw.slice(0, -4) : raw;
 }
@@ -14,7 +25,7 @@ export async function callInternalApi<T>(path: string, init?: RequestInit): Prom
     throw new Error("No active Supabase session");
   }
 
-  const response = await fetch(`${getApiUrl()}/api/internal${path}`, {
+  const response = await fetch(`${await getApiUrl()}/api/internal${path}`, {
     ...init,
     headers: {
       "content-type": "application/json",

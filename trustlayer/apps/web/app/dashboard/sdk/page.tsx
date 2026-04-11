@@ -26,13 +26,7 @@ const result = await tl.transaction.analyze({
 
 console.log(result.data.decision);`}</pre>
       </Panel>
-      <Panel title="Publish Checklist" description="Use this when releasing a new SDK version to npm.">
-        <pre className="overflow-auto rounded-2xl bg-[var(--ink)] p-5 text-sm text-white">{`cd C:\\Users\\Accountant\\Desktop\\Abdul\\squadco\\trustlayer
-
-npm --workspace @hamduktrustlayerai/sdk run build
-npm version patch --workspace @hamduktrustlayerai/sdk
-npm publish --workspace @hamduktrustlayerai/sdk --access public`}</pre>
-      </Panel>
+     
     </div>
   );
 }
