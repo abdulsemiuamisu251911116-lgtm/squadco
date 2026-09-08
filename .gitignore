@@ -1,0 +1,16 @@
+# test-bank-app now lives in its own repo (github.com/AmisuHikmot/HamdukBank).
+# Kept locally as a sibling checkout, deliberately untracked here so the two
+# repos don't collide or duplicate history.
+test-bank-app/
+
+node_modules/
+.next/
+.turbo/
+.vercel/
+dist/
+build/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.DS_Store
